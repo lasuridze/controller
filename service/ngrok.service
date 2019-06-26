@@ -1,0 +1,11 @@
+[Unit]
+Description=Ngrok on 8888
+After=network-online.target
+
+[Service]
+Type=simple
+User=mihail
+ExecStart=/usr/bin/tunnel.sh
+
+[Install]
+WantedBy=default.target

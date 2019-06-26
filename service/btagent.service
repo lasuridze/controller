@@ -1,0 +1,10 @@
+[Unit]
+Description=Bluetooth Auth Agent
+After=bluetooth.service
+
+[Service]
+ExecStart=/usr/bin/bt-agent -p /home/mihail/bt_keys -c DisplayOnly
+Type=simple
+
+[Install]
+WantedBy=multi-user.target

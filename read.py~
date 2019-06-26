@@ -1,0 +1,141 @@
+import math
+import os
+import sys
+import time
+import traceback
+#from threading import Thread
+from multiprocessing import Process
+
+from pyA20.gpio import gpio
+from pyA20.gpio import port
+import redis
+
+KEY_ENTER_TIMEOUT = 1  # in seconds, used to prevent mess when someone is pressing something on the reader's keyboard
+STORE_KEY = 'ho_keys'
+STORE_ALL_KEYS = 'ho_all_keys'
+store = redis.StrictRedis(host='localhost', port=6379, db=0)
+
+ELEVATORS = {
+    'left': {
+        'D0': port.PG6,
+        'D1': port.PG7,
+        'LED': port.PA7,
+        'COM': port.PA19
+    },
+    'right': {
+        'D0': port.PA10,
+        'D1': port.PA13,
+        'LED': port.PA2,
+        'COM': port.PA18
+    },
+    'cargo': {
+        'D0': port.PA12,
+        'D1': port.PA11,
+        'LED': port.PA6,
+        'COM': port.PA1
+    },
+    'door': {
+        'D0': port.PA3,
+        'D1': port.PA15,
+        'LED': port.PA16,
+        'COM': port.PA14,
+    }
+}
+
+gpio.init()
+for _, elevator in ELEVATORS.items():
+    gpio.setcfg(elevator.get('D0'), gpio.INPUT)
+    gpio.setcfg(elevator.get('D1'), gpio.INPUT)
+    gpio.setcfg(elevator.get('LED'), gpio.OUTPUT)
+    gpio.setcfg(elevator.get('COM'), gpio.OUTPUT)
+    gpio.pullup(elevator.get('D0'), 0)
+    gpio.pullup(elevator.get('D1'), 0)
+    gpio.pullup(elevator.get('D0'), gpio.PULLUP)
+    gpio.pullup(elevator.get('D1'), gpio.PULLUP)
+
+
+def blink_led(led, times=10):
+    for i in range(times):
+        gpio.output(led, i % 2)
+        time.sleep(0.2)
+    gpio.output(led, 1)
+
+
+def listen_card_by_elevator(name, pins, callback):
+    print '[process-{}] Starting listen cards for {} elevator\n'.format(os.getpid(), name)
+
+    D0 = pins.get('D0')
+    D1 = pins.get('D1')
+    LED = pins.get('LED')
+    COM = pins.get('COM')
+
+    gpio.output(LED, 1)  # set to red by default
+
+    while True:
+        started = time.time()
+        try:
+            cardnumber = 0
+            bit_count = 0
+            is_break = False
+            for x in range(0, 26):
+                data0 = gpio.input(D0)
+                data1 = gpio.input(D1)
+                while (data0 == 1 and data1 == 1):
+                    if bit_count == 0:
+                        time.sleep(0.00005)
+                    if time.time() - started > KEY_ENTER_TIMEOUT:
+                        is_break = True
+                        break
+                    data0 = gpio.input(D0)
+                    data1 = gpio.input(D1)
+
+                if is_break:
+                    break
+
+                cardnumber = cardnumber << 1
+                if data1 == 1:
+                    cardnumber = cardnumber | 0x01
+                bit_count += 1
+
+                while (data0 == 0 or data1 == 0):
+                    if time.time() - started > KEY_ENTER_TIMEOUT:
+                        is_break = True
+                        break
+                    data0 = gpio.input(D0)
+                    data1 = gpio.input(D1)
+
+                if is_break:
+                    break
+
+            cardnumber = cardnumber >> 1
+            cardnumber = cardnumber & 0x00ffffff
+            if not cardnumber or math.log10(cardnumber) < 5:
+                continue
+            keys = store.get(STORE_ALL_KEYS if name == 'door' else STORE_KEY) or ''
+            keys = keys.split()
+            print 'read {} on {}'.format(cardnumber, name)
+            if str(cardnumber) in keys:
+                print "OK"
+                gpio.output(LED, 0)
+            
+                gpio.output(COM, 1)
+                time.sleep(0.8)
+                gpio.output(COM, 0)
+
+                time.sleep(3)
+                gpio.output(LED, 1)
+                callback(name, str(cardnumber), True)
+            else:
+                print 'Access denied'
+                #blink_led(LED)
+                callback(name, str(cardnumber), False)
+        except:
+            print "{} elevator exception in listen card:".format(name)
+            traceback.print_exc()
+            time.sleep(0.1)
+
+
+def listen_card(callback):
+    for name, pins in ELEVATORS.items():
+        p = Process(target=listen_card_by_elevator, args=(name, pins, callback)).start()
+        #Thread(target=listen_card_by_elevator, args=(name, pins, callback)).start()

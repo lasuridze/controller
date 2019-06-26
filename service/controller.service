@@ -1,0 +1,11 @@
+[Unit]
+Description=Controller
+After=ngrok.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python /home/mihail/controller/controller.py
+
+[Install]
+WantedBy=default.target
