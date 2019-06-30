@@ -20,7 +20,7 @@ STORE_ALL_KEYS = 'ho_all_keys'
 HISTORY_STORE_KEY = 'ho_access_history'
 
 class Store:
-    STORE_FILE = '/home/mihail/c_store'
+    STORE_FILE = '/home/toka/c_store'
 
     def __init__(self):
         os.system('touch %s' % self.STORE_FILE)
