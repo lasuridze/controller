@@ -10,7 +10,7 @@ import requests
 import tornado.ioloop
 import tornado.web
 
-from read import listen_card, ELEVATORS
+from read import listen_card, ELEVATORS  #amit xdeba read.py funqciebis shemotana
 from controller_bt import bt_listener
 
 TOKEN = 'krmkdfj89wh4ubfw94kwb4wubv4wtinw4u'
